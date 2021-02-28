@@ -61,7 +61,7 @@ class Type(Enum):
 		if value in _range_table[self.value]: return value
 		mask = _cast_table[self.value]
 		value &= mask
-		if self.is_unsigned: return value
+		if self.is_unsigned(): return value
 		return value - 1 - mask
 
 

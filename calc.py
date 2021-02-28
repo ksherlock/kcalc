@@ -47,7 +47,7 @@ def pascal_modulo(a,b):
 def orca_shift(a,b):
 	# -b is a shift right
 	b = int32_t.cast(b)
-	if b < 0: return a >> b
+	if b < 0: return a >> abs(b)
 	return a << b 
 
 
@@ -74,7 +74,10 @@ class Parser(object):
 		while offset < l:
 			m = self.RE.match(s, offset)
 
-			if not m: raise Exception("Syntax Error")
+			if not m:
+				print(s)
+				print(" " * offset, "^", sep="")
+				raise Exception("Syntax Error")
 			offset = m.end()
 
 			value = self._convert_token(m, env)
@@ -87,22 +90,22 @@ class Parser(object):
 
 	def _convert_token(self, m, env):
 
-		if m["op"]: return m["op"]
+		if m["op"]: return m["op"].lower()
 
-		if m["bin"]: return Number(int(m["bin"], 2))
+		if m["bin"]: return Number(int(m["bin"], 2), self.default_type)
 
-		if m["hex"]: return Number(int(m["hex"], 16))
+		if m["hex"]: return Number(int(m["hex"], 16), self.default_type)
 
-		if m["dec"]: return Number(int(m["dec"], 10))
+		if m["dec"]: return Number(int(m["dec"], 10), self.default_type)
 
-		if m["oct"]: return Number(int(m["oct"], 8))
+		if m["oct"]: return Number(int(m["oct"], 8), self.default_type)
 
 		if m["id"]: return env[m["id"]]
 
 		if m["cc"]:
 			xx = [ord(x) for x in m["cc"]]
 			xx.reverse() # make little endian
-			return Number(reduce(lambda x,y: (x << 8) + y, xx))
+			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_type)
 		raise Exception("Missing type...")
 
 
@@ -161,6 +164,7 @@ class Parser(object):
 
 class CParser(Parser):
 
+	name = 'C'
 	default_type = int32_t
 
 	RE = re.compile(r"""
@@ -223,7 +227,6 @@ class CParser(Parser):
 
 	def _convert_token(self, m, env):
 
-		# print(m.groupdict())
 		if m["op"]: return m["op"]
 
 		if m["cc"]:
@@ -241,7 +244,7 @@ class CParser(Parser):
 				raise Exception("Invalid suffix: {}".format(suffix))
 			tp = self.SUFFIX[suffix]
 			if suffix == 'u':
-				tp = uint32_t
+				tp = self.default_type.make_unsigned()
 
 		# integer literal types:
 		# base 10 is always signed (unless explicitly unsigned)
@@ -275,6 +278,7 @@ class CParser(Parser):
 
 class PascalParser(Parser):
 
+	name = 'Pascal'
 	default_type = int32_t
 
 	RE = re.compile(r"""
@@ -320,7 +324,7 @@ class PascalParser(Parser):
 		'+': (2, _unary(lambda x: +x)),
 		'-': (2, _unary(lambda x: -x)),
 		'~': (2, _unary(lambda x: ~x)),
-		'not': (2, _unary(lambda x: not x)),
+		'not': (2, _unary(lambda x: int(not x))),
 	}
 
 	def __init__(self):
@@ -329,6 +333,7 @@ class PascalParser(Parser):
 
 class MerlinParser(Parser):
 
+	name = 'Merlin'
 	default_type = uint32_t
 
 	# should also have "x" for high-ascii char constant.
@@ -365,6 +370,7 @@ class MerlinParser(Parser):
 
 class OrcaParser(Parser):
 
+	name = 'ORCA/M'
 	default_type = uint32_t
 
 	RE = re.compile(r"""
@@ -375,41 +381,114 @@ class OrcaParser(Parser):
 				| (?P<dec>[0-9]+)
 				| @(?P<oct>[0-7]+)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
-				| (?P<op>\.NOT\.|\.OR\.|\.EOR\.|\.AND\.|<=|>=|<>|[-+*/|=<>()])
+				| (?P<op>\.not\.|\.or\.|\.eor\.|\.and\.|<=|>=|<>|[-+*/!|=<>()])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
 		""", re.X | re.I)
 
+		# 0.AND.(1/0) generates a Numeric Error in Operand
 	BINARY = {
 
 		'*': (3, _binary(lambda x,y: x*y)),
 		'/': (3, _binary(lambda x,y: x//y)),
-		'|': (3, orca_shift),
-		'!': (3, orca_shift),
+		'|': (3, _binary(orca_shift)),
+		'!': (3, _binary(orca_shift)),
 
 		'+': (4, _binary(lambda x,y: x+y)),
 		'-': (4, _binary(lambda x,y: x-y)),
-		'.OR.': (4, logical_or),
-		'.EOR.': (4, logical_xor),
-		'.AND.': (4, logical_and),
+		'.or.': (4, _binary(lambda x,y: int(bool(x) or bool(y)))),
+		'.eor.': (4, _binary(lambda x,y: int(bool(x) ^ bool(y)))),
+		'.and.': (4, _binary(lambda x,y: int(bool(x) and bool(y)))),
 
-		'=': (5, _binary(lambda x,y: x==y)),
-		'<': (5, _binary(lambda x,y: x<y)),
-		'>': (5, _binary(lambda x,y: x>y)),
-		'<=': (5, _binary(lambda x,y: x<=y)),
-		'>=': (5, _binary(lambda x,y: x>=y)),
-		'<>': (5, _binary(lambda x,y: x!=y)),
+		'=': (5, _binary(lambda x,y: int(x==y))),
+		'<': (5, _binary(lambda x,y: int(x<y))),
+		'>': (5, _binary(lambda x,y: int(x>y))),
+		'<=': (5, _binary(lambda x,y: int(x<=y))),
+		'>=': (5, _binary(lambda x,y: int(x>=y))),
+		'<>': (5, _binary(lambda x,y: int(x!=y))),
 	}
 
 	UNARY = {
 		'+': (2, _unary(lambda x: +x)),
 		'-': (2, _unary(lambda x: -x)),
 		'~': (2, _unary(lambda x: ~x)),
-		'.NOT.': (2, _unary(lambda x: not x)),
+		'.not.': (2, _unary(lambda x: int(not x))),
 	}
 
 	def __init__(self):
-		super(PascalParser, self).__init__()
+		super(OrcaParser, self).__init__()
+
+
+class MPWParser(Parser):
+
+	name = 'MPW Asm'
+	default_type = int32_t
+
+	RE = re.compile(r"""
+			(?:[ \t]*)
+			(?:
+				  \$(?P<hex>[A-Fa-f0-9]+)
+				| %(?P<bin>[01]+)
+				| (?P<dec>[0-9]+)
+				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| (?P<op>not|div|mod|and|or|xor|eor|<=|>=|<>|<<|>>|\*\*|\+\+|--|//|[-+*/=<>()¬≈÷≠≤≥Ω])
+				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
+			)
+		""", re.X | re.I)
+
+		# division by 0 -> 0
+		# "logical" ops aren't exactly.
+	BINARY = {
+
+		'*': (4, _binary(lambda x,y: x*y)),
+
+		'+': (6, _binary(lambda x,y: x+y)),
+		'-': (6, _binary(lambda x,y: x-y)),
+
+		'/': (5, _binary(lambda x,y: y if not y else x//y )),
+		'÷': (5, _binary(lambda x,y: y if not y else x//y )),
+		'div': (5, _binary(lambda x,y: y if not y else x//y )),
+		'//': (5, _binary(lambda x,y: y if not y else x%y )),
+		'mod': (5, _binary(lambda x,y: y if not y else x%y )),
+
+		'<<': (7, _binary(lambda x,y: x<<y)),
+		'>>': (7, _binary(lambda x,y: x>>y)),
+		'=': (7, _binary(lambda x,y: int(x==y))),
+		'<': (7, _binary(lambda x,y: int(x<y))),
+		'>': (7, _binary(lambda x,y: int(x>y))),
+		'<=': (7, _binary(lambda x,y: int(x<=y))),
+		'≤': (7, _binary(lambda x,y: int(x<=y))),
+		'>=': (7, _binary(lambda x,y: int(x>=y))),
+		'≥': (7, _binary(lambda x,y: int(x>=y))),
+		'<>': (7, _binary(lambda x,y: int(x!=y))),
+		'≠': (5, _binary(lambda x,y: int(x!=y))),
+
+
+		'or': (9, _binary(lambda x,y: x | y)),
+		'++': (9, _binary(lambda x,y: x | y)),
+		'Ω': (9, _binary(lambda x,y: x | y)),
+		'ω': (9, _binary(lambda x,y: x | y)), # lowercase....
+
+		'eor': (9, _binary(lambda x,y: x ^ y)),
+		'xor': (9, _binary(lambda x,y: x ^ y)),
+		'--': (9, _binary(lambda x,y: x ^ y)),
+
+		'and': (8, _binary(lambda x,y: x & y)),
+		'**': (8, _binary(lambda x,y: x & y)),
+
+
+	}
+
+	UNARY = {
+		'+': (3, _unary(lambda x: +x)),
+		'-': (3, _unary(lambda x: -x)),
+		'≈': (2, _unary(lambda x: ~x)),
+		'not': (2, _unary(lambda x: x ^ 1)),
+		'¬': (2, _unary(lambda x: x ^ 1)),
+	}
+
+	def __init__(self):
+		super(MPWParser, self).__init__()
 
 
 def to_b(v):
@@ -437,6 +516,7 @@ def display(num):
 	uvalue = num.unsigned_value()
 	print("0x{:08x}  0b{:032b} {}".format(uvalue, uvalue, to_cc(uvalue)))
 
+	print("{}".format(num))
 	#for x in num.alternates() :
 	#	print("{:24}".format(str(x)), end="")
 
@@ -456,7 +536,7 @@ def display(num):
 
 
 if __name__ == '__main__':
-	p = CParser()
+	p = MPWParser()
 	env = {}
 	env["_"] = 0
 

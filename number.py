@@ -66,7 +66,7 @@ class Number(object):
 		if self._type == t: return self._value
 		return t.cast(self._value)
 
-
+# todo -- exceptions should also have a type?
 def unary_op(a, op):
 	if a._exception: return a
 	v = a._value
@@ -75,7 +75,7 @@ def unary_op(a, op):
 	# 	t = default_type
 	# 	v = coerce(v, t)
 	try:
-		return Number(op(v), t)
+		return Number(+op(v), t)
 	except Exception as e:
 		return Number(e)
 
@@ -88,26 +88,27 @@ def binary_op(a, b, op):
 	bb = t.cast(b._value)
 
 	try:
-		return Number(op(aa,bb), t)
+		return Number(+op(aa,bb), t)
 	except Exception as e:
 		return Number(e)
+
 
 
 # special case for short-circuiting logical ops.
 def logical_or(a, b):
 	if a._exception: return a
-	if a._value: return Number(1, default_type)
+	if a._value: return Number(1, a._type)
 	if b._exception: return b
-	return Number(b._value != 0, default_type)
+	return Number(int(b._value != 0), b._type)
 
 def logical_and(a, b):
 	if a._exception: return a
-	if not a._value: return Number(0, default_type)
+	if not a._value: return Number(0, a._type)
 	if b._exception: return b
-	return Number(b._value != 0, default_type)
+	return Number(int(b._value != 0), b._type)
 
 def logical_xor(a, b):
 	if a._exception: return a
 	if b._exception: return b
-	return Number(int(bool(a._value) ^ bool(b._value)), default_type)
+	return Number(int(bool(a._value) ^ bool(b._value)), a._type)
 
