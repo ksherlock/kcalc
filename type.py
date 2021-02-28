@@ -70,6 +70,9 @@ class Type(Enum):
 
 		return None
 
+
+globals().update(Type.__members__)
+
 if __name__ == '__main__':
 	int8_t = Type.int8_t
 	uint8_t = Type.uint8_t
