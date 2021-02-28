@@ -24,6 +24,13 @@ _range_table = (
 	range(-0x0000000000000000, 0x10000000000000000),
 )
 
+_cast_table = (
+	None, None,
+	0xff, 0xff,
+	0xffff, 0xffff,
+	0xffffffff, 0xffffffff,
+	0xffffffffffffffff, 0xffffffffffffffff,
+)
 
 class Type(Enum):
 	int8_t   = 2
@@ -41,18 +48,29 @@ class Type(Enum):
 	def is_signed(self):
 		return self.value & 0x01 == 0
 
+	def is_unsigned(self):
+		return self.value & 0x01 == 0x01
+
 	def make_signed(self):
 		return Type(self.value & ~0x01)
 
 	def make_unsigned(self):
 		return Type(self.value | 0x01)
 
+	def cast(self, value):
+		if value in _range_table[self.value]: return value
+		mask = _cast_table[self.value]
+		value &= mask
+		if self.is_unsigned: return value
+		return value - 1 - mask
+
+
 	@staticmethod
 	def common_type(*args):
 		return Type(max([x.value for x in args]))
 
 	@staticmethod
-	def type_for_value(value, /, base=None, signed=True, unsigned=True):
+	def type_that_fits(value, /, base=None, signed=True, unsigned=True):
 		start = 2
 		step = 1
 		# bits = (signed << 2) | (unsigned << 1)
@@ -61,8 +79,9 @@ class Type(Enum):
 		if not (signed | unsigned): return None
 		if signed ^ unsigned: step = 2
 
-		if base: start = base.value
-		if not signed: start += 1
+		if not base: base = Type.int8_t
+		start = base.value
+		if not signed and base.is_signed(): start += 1
 
 		for x in range(start,10,step):
 			if value in _range_table[x]:
@@ -74,6 +93,10 @@ class Type(Enum):
 globals().update(Type.__members__)
 
 if __name__ == '__main__':
+
+	print(Type.type_that_fits(1, base=uint32_t, signed=uint32_t.is_signed(), unsigned=True))
+	exit()
+
 	int8_t = Type.int8_t
 	uint8_t = Type.uint8_t
 	int32_t = Type.int32_t
@@ -90,7 +113,9 @@ if __name__ == '__main__':
 	print(Type.common_type(int8_t, uint8_t))
 	print(Type.common_type(uint8_t, int32_t))
 	print()
-	print(Type.type_for_value(32767))
-	print(Type.type_for_value(32768, unsigned=False))
-	print(Type.type_for_value(32768, signed=False))
-	print(Type.type_for_value(-1, base=int32_t))
+	print(Type.type_that_fits(32767))
+	print(Type.type_that_fits(32768, unsigned=False))
+	print(Type.type_that_fits(32768, signed=False))
+	print(Type.type_that_fits(-1, base=int32_t))
+
+

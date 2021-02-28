@@ -7,9 +7,9 @@ from functools import reduce
 
 # WS = re.compile("[ \t]*")
 
-from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor, coerce
-from number import int32_t, uint32_t, int16_t, uint16_t, int64_t, uint64_t
-
+from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor
+# from number import int32_t, uint32_t, int16_t, uint16_t, int64_t, uint64_t
+from type import *
 
 def _binary(fn):
 	def inner(a,b):
@@ -46,7 +46,7 @@ def pascal_modulo(a,b):
 
 def orca_shift(a,b):
 	# -b is a shift right
-	b = coerce(b, int32_t)
+	b = int32_t.cast(b)
 	if b < 0: return a >> b
 	return a << b 
 
@@ -166,15 +166,15 @@ class CParser(Parser):
 	RE = re.compile(r"""
 			(?:[ \t]*)
 			(?:
-				  (
-					  (
-					 	  0x(?P<hex>[A-Fa-f0-9]+)
-						| 0b(?P<bin>[01]+)
-						| (?P<oct>0[0-7]*)
-						| (?P<dec>[1-9][0-9]*)
-					  ) (?P<suffix>[uUlL]*)
-				  )
-				|
+			 	(
+			 		(
+			 		  0x(?P<hex>[A-Fa-f0-9]+)
+					| 0b(?P<bin>[01]+)
+					| (?P<oct>0[0-7]*)
+					| (?P<dec>[1-9][0-9]*)
+					)
+					(?P<suffix>[uUlL]*)
+				)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>])
@@ -223,6 +223,7 @@ class CParser(Parser):
 
 	def _convert_token(self, m, env):
 
+		# print(m.groupdict())
 		if m["op"]: return m["op"]
 
 		if m["cc"]:
@@ -242,19 +243,29 @@ class CParser(Parser):
 			if suffix == 'u':
 				tp = uint32_t
 
-		n = None
-		if m["bin"]: return Number(int(m["bin"], 2), tp)
+		# integer literal types:
+		# base 10 is always signed (unless explicitly unsigned)
+		# other bases will covert to unsigned
+		# eg, 0x7fff is signed int, 0xffff is unsigned int
+		value = None
 
-		if m["hex"]: return Number(int(m["hex"], 16), tp)
+		base = 0
+		if m["dec"]:   base = 10 ; value = int(m["dec"], 10)
+		elif m["hex"]: base = 16 ; value = int(m["hex"], 16)
+		elif m["bin"]: base = 2  ; value = int(m["bin"], 2)
+		elif m["oct"]: base = 8  ; value = int(m["oct"], 8)
+		else: raise Exception("Missing type... {}")
 
-		if m["dec"]: return Number(int(m["dec"], 10), tp)
+		signed = tp.is_signed()
+		unsigned = tp.is_unsigned() or base != 10
 
-		if m["oct"]: return Number(int(m["oct"], 8), tp)
-
-
-
-		raise Exception("Missing type...")
-
+		tp = Type.type_that_fits(
+			value,
+			base = tp,
+			signed = signed,
+			unsigned = unsigned
+		)
+		return Number(value, tp)
 
 
 
@@ -426,8 +437,8 @@ def display(num):
 	uvalue = num.unsigned_value()
 	print("0x{:08x}  0b{:032b} {}".format(uvalue, uvalue, to_cc(uvalue)))
 
-	for x in num.alternates() :
-		print("{:24}".format(str(x)), end="")
+	#for x in num.alternates() :
+	#	print("{:24}".format(str(x)), end="")
 
 	#if num.is_signed():
 	#	print("(int32_t){:<10}  (uint32_t){:<10}".format(value, uvalue))
