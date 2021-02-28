@@ -8,7 +8,7 @@ from functools import reduce
 # WS = re.compile("[ \t]*")
 
 from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor, coerce
-from number import default_type, int32_t, uint32_t, int16_t, uint16_t
+from number import int32_t, uint32_t, int16_t, uint16_t, int64_t, uint64_t
 
 
 def _binary(fn):
@@ -76,30 +76,35 @@ class Parser(object):
 
 			if not m: raise Exception("Syntax Error")
 			offset = m.end()
-			value = None
 
-			if m["op"]: value = m["op"]
-
-			elif m["bin"]: value = Number(int(m["bin"], 2))
-
-			elif m["hex"]: value = Number(int(m["hex"], 16))
-
-			elif m["dec"]: value = Number(int(m["dec"], 10))
-
-			elif m["oct"]: value = Number(int(m["oct"], 8))
-
-			elif m["id"]: value = env[m["id"]]
-
-			elif m["cc"]:
-				xx = [ord(x) for x in m["cc"]]
-				xx.reverse() # make little endian
-				value = Number(reduce(lambda x,y: (x << 8) + y, xx))
-			else: raise Exception("Missing type...")
+			value = self._convert_token(m, env)
 
 			tokens.append(value)
 
 		tokens.reverse()
 		return tokens
+
+
+	def _convert_token(self, m, env):
+
+		if m["op"]: return m["op"]
+
+		if m["bin"]: return Number(int(m["bin"], 2))
+
+		if m["hex"]: return Number(int(m["hex"], 16))
+
+		if m["dec"]: return Number(int(m["dec"], 10))
+
+		if m["oct"]: return Number(int(m["oct"], 8))
+
+		if m["id"]: return env[m["id"]]
+
+		if m["cc"]:
+			xx = [ord(x) for x in m["cc"]]
+			xx.reverse() # make little endian
+			return Number(reduce(lambda x,y: (x << 8) + y, xx))
+		raise Exception("Missing type...")
+
 
 
 	def _token(self):
@@ -161,10 +166,15 @@ class CParser(Parser):
 	RE = re.compile(r"""
 			(?:[ \t]*)
 			(?:
-				  0x(?P<hex>[A-Fa-f0-9]+)
-				| 0b(?P<bin>[01]+)
-				| (?P<oct>0[0-7]*)
-				| (?P<dec>[1-9][0-9]*)
+				  (
+					  (
+					 	  0x(?P<hex>[A-Fa-f0-9]+)
+						| 0b(?P<bin>[01]+)
+						| (?P<oct>0[0-7]*)
+						| (?P<dec>[1-9][0-9]*)
+					  ) (?P<suffix>[uUlL]*)
+				  )
+				|
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>])
@@ -201,6 +211,52 @@ class CParser(Parser):
 		'~': (2, _unary(lambda x: ~x)),
 		'!': (2, _unary(lambda x: not x)),
 	}
+	SUFFIX = {
+		'u': None,
+		'ul' : uint32_t,
+		'lu' : uint32_t,
+		'ull' : uint64_t,
+		'llu' : uint64_t,
+		'l': int32_t,
+		'll': int64_t,
+	}
+
+	def _convert_token(self, m, env):
+
+		if m["op"]: return m["op"]
+
+		if m["cc"]:
+			xx = [ord(x) for x in m["cc"]]
+			xx.reverse() # make little endian
+			return Number(reduce(lambda x,y: (x << 8) + y, xx))
+
+		if m["id"]: return env[m["id"]]
+
+		tp = self.default_type
+		suffix = m["suffix"]
+		if suffix:
+			suffix = suffix.lower()
+			if suffix not in self.SUFFIX:
+				raise Exception("Invalid suffix: {}".format(suffix))
+			tp = self.SUFFIX[suffix]
+			if suffix == 'u':
+				tp = uint32_t
+
+		n = None
+		if m["bin"]: return Number(int(m["bin"], 2), tp)
+
+		if m["hex"]: return Number(int(m["hex"], 16), tp)
+
+		if m["dec"]: return Number(int(m["dec"], 10), tp)
+
+		if m["oct"]: return Number(int(m["oct"], 8), tp)
+
+
+
+		raise Exception("Missing type...")
+
+
+
 
 	def __init__(self):
 		super(CParser, self).__init__()
@@ -389,7 +445,6 @@ def display(num):
 
 
 if __name__ == '__main__':
-	default_type = int32_t
 	p = CParser()
 	env = {}
 	env["_"] = 0
