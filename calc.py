@@ -45,6 +45,8 @@ def pascal_modulo(a,b):
 
 def orca_shift(a,b):
 	# -b is a shift right
+	# signed shift.
+	a = int32_t.cast(a)
 	b = int32_t.cast(b)
 	if b < 0: return a >> abs(b)
 	return a << b 
@@ -55,6 +57,10 @@ class Parser(object):
 	default_type = None
 
 	def __init__(self):
+		pass
+
+
+	def set_default_type(self, value):
 		pass
 
 	def evaluate(self, s, env={}):
@@ -204,7 +210,7 @@ class CParser(Parser):
 		'^': (9, _binary(lambda x,y: x^y)),
 		'|': (10, _binary(lambda x,y: x|y)),
 
-		'&&': (11, logical_and ),
+		'&&': (11, logical_and),
 		'||': (12, logical_or),
 
 		'<<': (5, _binary(lambda x,y: x<<y)),
@@ -276,6 +282,8 @@ class CParser(Parser):
 		)
 		return Number(value, tp)
 
+	def set_default_type(self, value):
+		self.default_type = value
 
 
 	def __init__(self):
@@ -585,6 +593,12 @@ class Evaluator(object):
 		'orca': OrcaParser,
 		'mpw': MPWParser,
 	}
+	INT = {
+		16: int16_t,
+		32: int32_t,
+		64: int64_t,
+	}
+
 	def dot(self, s):
 
 		if s == ".quit":
@@ -613,9 +627,10 @@ class Evaluator(object):
 
 		m = re.match(r"\.int\s+(\d+)", s)
 		if m:
-			n = int(m[0])
+			n = int(m[1],10)
 			if n in (16, 32, 64):
-				pass
+				self.p.set_default_type(self.INT[n])
+				print("Integer:", self.p.default_type.name)
 			else:
 				print("Bad integer size:", n)
 			return
