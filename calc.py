@@ -194,8 +194,8 @@ class CParser(Parser):
 	BINARY = {
 
 		'*': (3, _binary(lambda x,y: x*y)),
-		'/': (3, _binary(lambda x,y: x//y)),
-		'%': (3, _binary(lambda x,y: x%y)),
+		'/': (3, _binary(c_division)),
+		'%': (3, _binary(c_modulo)),
 		'+': (4, _binary(lambda x,y: x+y)),
 		'-': (4, _binary(lambda x,y: x-y)),
 		'<': (6, _binary(lambda x,y: x<y)),
