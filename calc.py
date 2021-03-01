@@ -8,7 +8,6 @@ from functools import reduce
 # WS = re.compile("[ \t]*")
 
 from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor
-# from number import int32_t, uint32_t, int16_t, uint16_t, int64_t, uint64_t
 from type import *
 
 def _binary(fn):
@@ -90,20 +89,26 @@ class Parser(object):
 
 	def _convert_token(self, m, env):
 
-		if m["op"]: return m["op"].lower()
+		data = m.groupdict()
 
-		if m["bin"]: return Number(int(m["bin"], 2), self.default_type)
+		x = data.get("op", None);
+		if x: return x.lower()
 
-		if m["hex"]: return Number(int(m["hex"], 16), self.default_type)
+		x = data.get("dec", None);
+		if x: return Number(int(x, 10), self.default_type)
+		x = data.get("hex", None);
+		if x: return Number(int(x, 16), self.default_type)
+		x = data.get("bin", None);
+		if x: return Number(int(x, 2), self.default_type)
+		x = data.get("oct", None);
+		if x: return Number(int(x, 8), self.default_type)
 
-		if m["dec"]: return Number(int(m["dec"], 10), self.default_type)
+		x = data.get("id", None);
+		if x: return env[m["id"]]
 
-		if m["oct"]: return Number(int(m["oct"], 8), self.default_type)
-
-		if m["id"]: return env[m["id"]]
-
-		if m["cc"]:
-			xx = [ord(x) for x in m["cc"]]
+		x = data.get("cc", None);
+		if x:
+			xx = [ord(y) for y in x]
 			xx.reverse() # make little endian
 			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_type)
 		raise Exception("Missing type...")
@@ -122,9 +127,10 @@ class Parser(object):
 		if tk in self.UNARY:
 			prec, fn = self.UNARY[tk]
 			t = self._term()
-			if t == None: raise Exception("Syntax error: expected terminal")
+			if t == None: raise Exception("Syntax error: expected terminal, found EOF")
 			return fn(t)
-		raise Exception("Syntax error: expected terminal")
+		if tk == None: tk = "EOF"
+		raise Exception("Syntax error: expected terminal, found {}".format(tk))
 		
 
 	def _expr(self, end = None):
@@ -535,30 +541,90 @@ def display(num):
 	print()
 
 
+class Evaluator(object):
+	def __init__(self):
+		self.p = CParser()
+		self.env = {}
+		self.env["_"] = Number(0, self.p.default_type)
+
+	def repl(self):
+		while True:
+			s = ""
+			try:
+				s = input("] ")
+				s.strip()
+				if not s: continue
+
+				if s[0] == ".": self.dot(s)
+				else: self.ep(s)
+
+			except EOFError as ex:
+				print()
+				return 0
+			except KeyboardInterrupt as ex:
+				print()
+				return 0
+
+			except KeyError as ex:
+				print("Unbound variable: {}".format(ex.args[0]))
+
+			except Exception as e:
+				print(e)
+				# raise
+
+	def ep(self, s):
+		x = self.p.evaluate(s, self.env)
+		self.env["_"]=x
+		display(x)
+
+	LANG = {
+		'cc': CParser,
+		'c': CParser,
+		'pascal': PascalParser,
+		'merlin': MerlinParser,
+		'orca': OrcaParser,
+		'mpw': MPWParser,
+	}
+	def dot(self, s):
+
+		if s == ".quit":
+			raise EOFError()
+
+		if s == ".clear":
+			self.env = {}
+			self.env["_"] = Number(0, self.p.default_type)
+			return
+
+		if s == ".lang":
+			print("Language:", self.p.name)
+			return
+		if s == ".int":
+			print("Integer:", self.p.default_type.name)
+
+		m = re.match(r"\.lang\s+([A-Za-z]+)", s)
+		if m:
+			lang = m[1].lower()
+			if lang in self.LANG:
+				self.p = self.LANG[lang]()
+				print("Language:", self.p.name)
+			else:
+				print("Bad language:", lang)
+			return
+
+		m = re.match(r"\.int\s+(\d+)", s)
+		if m:
+			n = int(m[0])
+			if n in (16, 32, 64):
+				pass
+			else:
+				print("Bad integer size:", n)
+			return
+
+
+
+
 if __name__ == '__main__':
-	p = MPWParser()
-	env = {}
-	env["_"] = 0
 
-	while True:
-		s = ""
-		try:
-			s = input("] ")
-			s.strip()
-			if not s: continue
-			x = p.evaluate(s, env)
-			env["_"]=x
-			display(x)
-		except EOFError as ex:
-			print()
-			exit(0)
-		except KeyboardInterrupt as ex:
-			print()
-			exit(0)
-
-		except KeyError as ex:
-			print("Unbound variable: {}".format(ex.args[0]))
-
-		except Exception as e:
-			print(e)
-
+	repl = Evaluator()
+	repl.repl()
+	exit(0)
