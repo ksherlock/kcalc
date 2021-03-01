@@ -51,7 +51,11 @@ class Number(object):
 
 	def is_signed(self):
 		if self._exception: raise self._exception
-		return (self._type & 0x01) == 1
+		return self._type.is_signed()
+
+	def is_unsigned(self):
+		if self._exception: raise self._exception
+		return self._type.is_unsigned()
 
 	def signed_value(self):
 		if self._exception: raise self._exception
@@ -65,6 +69,11 @@ class Number(object):
 		if self._exception: raise self._exception
 		if self._type == t: return self._value
 		return t.cast(self._value)
+
+	def cast(self, t):
+		if self._exception: raise self._exception
+		if self._type == t: return self
+		return Number(self._value, t)
 
 # todo -- exceptions should also have a type?
 def unary_op(a, op):

@@ -530,7 +530,16 @@ def display(num):
 	uvalue = num.unsigned_value()
 	print("0x{:08x}  0b{:032b} {}".format(uvalue, uvalue, to_cc(uvalue)))
 
-	print("{}".format(num))
+	tl = (uint32_t, int32_t, uint16_t, int16_t, uint8_t, int8_t)
+
+	nums = [num.cast(x) for x in tl]
+	nums = [x for x in nums if x.value() != value]
+
+	nums.insert(0, num)
+	for x in nums: print("({:>8}){:<32}".format(x.type().name, x.value()))
+	print()
+
+
 	#for x in num.alternates() :
 	#	print("{:24}".format(str(x)), end="")
 
@@ -546,7 +555,7 @@ def display(num):
 	#for n in tmp:
 	#	print(str(n), end=" ")
 
-	print()
+	# print()
 
 
 class Evaluator(object):
@@ -593,11 +602,20 @@ class Evaluator(object):
 		'orca': OrcaParser,
 		'mpw': MPWParser,
 	}
-	INT = {
+	WORD = {
 		16: int16_t,
 		32: int32_t,
 		64: int64_t,
 	}
+
+	def help(self):
+		print(
+			".help                            - you are here",
+			".lang [c|pascal|merlin|orca|mpw] - set language",
+			".word [16|32|64]                 - set word size",
+			"",
+			sep = "\n"
+		)
 
 	def dot(self, s):
 
@@ -612,8 +630,8 @@ class Evaluator(object):
 		if s == ".lang":
 			print("Language:", self.p.name)
 			return
-		if s == ".int":
-			print("Integer:", self.p.default_type.name)
+		if s == ".word":
+			print("Word:", self.p.default_type.name)
 
 		m = re.match(r"\.lang\s+([A-Za-z]+)", s)
 		if m:
@@ -625,14 +643,14 @@ class Evaluator(object):
 				print("Bad language:", lang)
 			return
 
-		m = re.match(r"\.int\s+(\d+)", s)
+		m = re.match(r"\.word\s+(\d+)", s)
 		if m:
 			n = int(m[1],10)
-			if n in (16, 32, 64):
-				self.p.set_default_type(self.INT[n])
-				print("Integer:", self.p.default_type.name)
+			if n in self.WORD:
+				self.p.set_default_type(self.WORD[n])
+				print("Word:", self.p.default_type.name)
 			else:
-				print("Bad integer size:", n)
+				print("Bad word size:", n)
 			return
 
 

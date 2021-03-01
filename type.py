@@ -46,7 +46,7 @@ class Type(Enum):
 		return _range_table[self.value]
 
 	def is_signed(self):
-		return self.value & 0x01 == 0
+		return self.value & 0x01 == 0x00
 
 	def is_unsigned(self):
 		return self.value & 0x01 == 0x01
