@@ -4,11 +4,19 @@
 import readline
 import re
 from functools import reduce
+from collections import OrderedDict
+import traceback
 
 # WS = re.compile("[ \t]*")
 
 from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor
 from type import *
+
+class NegativeDivisionError(ArithmeticError):
+	def __init__(self, /, *args, **kwargs):
+		super(NegativeDivisionError, self).__init__(*args, **kwargs)
+		
+
 
 def _binary(fn):
 	def inner(a,b):
@@ -33,15 +41,30 @@ def c_modulo(a,b):
 	if (a < 0) == (b < 0): return a % b
 	return -(abs(a) % abs(b))
 
-def pascal_modulo(a,b):
-	# The mod operator returns the remainder resulting from the division of two integer quantities. 
-	# The mod operator for i mod j is defined as the smallest positive number that can result from the
- 	# expression (i - (k * j)), where k is also an integer.
+def iso_pascal_modulo(a,b):
 
- 	# https://wiki.freepascal.org/Mod
+	# i mod j == (i - (k * j)) for integral k such that 0 <= i mod j < j
+	# therefore, answer is always positive.
+	# 10 mod 3 = 1; (k = 3) -10 mod 3 = 2 ( k = -4)
+	# this corresponds to python %, aside from negative denominotor
+	# (which is an error)
 
-	if (a < 0) == (b < 0): return a % b
-	return abs(a) % abs(b)
+	if b < 0: raise NegativeDivisionError('integer modulo by negative')
+	return a % b
+
+
+def iso_pascal_division(a,b):
+
+	# abs(i) - abs(j) < abs( (i div j) * j) <= abs(i)
+	# positive if i & j have the same sign
+	# otherwise, negative.
+
+	# therefore must round toward 0.
+
+	if (a < 0) == (b < 0): return a // b
+	return -(abs(a) // abs(b))
+
+
 
 def orca_shift(a,b):
 	# -b is a shift right
@@ -125,6 +148,11 @@ class Parser(object):
 		if not self._tokens: return None
 		return self._tokens.pop()
 
+	def _peek_token(self):
+		if not self._tokens: return None
+		return self._tokens[-1]
+
+
 	def _term(self):
 		tk = self._token()
 		if tk == '(': return self._expr(')')
@@ -197,6 +225,7 @@ class CParser(Parser):
 			)
 		""", re.X)
 
+	# todo - boolean ops should drop back to the default type.
 	BINARY = {
 
 		'*': (3, _binary(lambda x,y: x*y)),
@@ -302,21 +331,22 @@ class PascalParser(Parser):
 				| %(?P<bin>[01]+)
 				| (?P<dec>[0-9]+)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
-				| (?P<op>div|mod|and|or|not|xor|<<|>>|<=|>=|<>|\*\*|:=|[-+*/=<>&|!~()])
+				| (?P<op>div|mod|and|or|not|xor|<<|>>|<=|>=|<>|:=|[-+*=<>&|!~()])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
 		""", re.X | re.I)
 
 	BINARY = {
-		'**': (2, _binary(lambda x,y: x**y)),
+		# these return a floating point result
+		# '**': (2, _binary(lambda x,y: x**y)),
+		# '/': (3, _binary(lambda x,y: x//y)), 
 
 		'*': (3, _binary(lambda x,y: x*y)),
-		'/': (3, _binary(lambda x,y: x//y)),
 		'&': (3, _binary(lambda x,y: x&y)),
 		'<<': (3, _binary(lambda x,y: x<<y)),
 		'>>': (3, _binary(lambda x,y: x>>y)),
-		'div': (3, _binary(lambda x,y: x//y)),
-		'mod': (3, _binary(lambda x,y: x%y)),
+		'div': (3, _binary(iso_pascal_division)),
+		'mod': (3, _binary(iso_pascal_modulo)),
 		'and': (3, logical_and),
 
 		'+': (4, _binary(lambda x,y: x+y)),
@@ -335,11 +365,76 @@ class PascalParser(Parser):
 	}
 
 	UNARY = {
-		'+': (2, _unary(lambda x: +x)),
-		'-': (2, _unary(lambda x: -x)),
+		'+': (4, _unary(lambda x: +x)),
+		'-': (4, _unary(lambda x: -x)),
 		'~': (2, _unary(lambda x: ~x)),
 		'not': (2, _unary(lambda x: int(not x))),
 	}
+
+	# pascal unary +- are too weird for shunting yard.
+	def _expr(self):
+		relops = ('=', '<>', '<', '>', '<=', '>=')
+		a = self._simple_expr()
+		tk = self._peek_token()
+		while tk in relops:
+			tk = self._token()
+			b = self._simple_expr()
+			a = self.BINARY[tk][1](a, b)
+			tk = self._peek_token()
+		return a
+
+	def _simple_expr(self):
+		addops = ('+', '-', 'or', 'xor', '|', '!')
+		a = self._term_expr(True)
+		tk = self._peek_token()
+		while tk in addops:
+			tk = self._token()
+			b = self._term_expr()
+			a = self.BINARY[tk][1](a, b)
+			tk = self._peek_token()
+		return a
+
+	def _term_expr(self, unary=False):
+		mulops = ('*', 'div', 'mod', 'and',  '&', '<<', '>>')
+
+		sign = None
+		if unary:
+			tk = self._peek_token()
+			if tk in ('+', '-'): sign = self._token()
+
+		a = self._factor_expr()
+		tk = self._peek_token()
+		while tk in mulops:
+			tk = self._token()
+			b = self._factor_expr()
+			a = self.BINARY[tk][1](a, b)
+			tk = self._peek_token()
+
+		if sign:
+			a = self.UNARY[sign][1](a)
+		return a
+
+
+	def _factor_expr(self):
+		unaryops = ('~', 'not')
+
+		tk = self._token()
+		if type(tk) == Number: return tk
+
+		if tk in unaryops:
+			a = self._factor_expr()
+			return self.UNARY[tk][1](a)
+
+		if tk == '(':
+			a = self._expr()
+			tk = self._token()
+			if tk == ')': return a
+			if tk == None: tk = "EOF"
+			raise Exception("Syntax error: expected ), found {}".format(tk))
+
+		if tk == None: tk = "EOF"
+		raise Exception("Syntax error: expected terminal, found {}".format(tk))
+
 
 	def __init__(self):
 		super(PascalParser, self).__init__()
@@ -358,19 +453,22 @@ class MerlinParser(Parser):
 				| %(?P<bin>[01]+)
 				| (?P<dec>[0-9]+)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
-				| (?P<op>[-+*/!.&])
+				| (?P<op>[-+*/!.&<>=])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
 		""", re.X | re.I)
 
 	BINARY = {
 		'*': (1, _binary(lambda x,y: x*y)),
-		'/': (1, _binary(lambda x,y: x//y)),
+		'/': (1, _binary(lambda x,y: -1 if y ==0 else x//y )),
 		'+': (1, _binary(lambda x,y: x+y)),
 		'-': (1, _binary(lambda x,y: x-y)),
 		'&': (1, _binary(lambda x,y: x&y)),
 		'.': (1, _binary(lambda x,y: x|y)),
 		'!': (1, _binary(lambda x,y: x^y)),
+		'>': (1, _binary(lambda x,y: int(x>y))),
+		'<': (1, _binary(lambda x,y: int(x<y))),
+		'=': (1, _binary(lambda x,y: int(x=y))),
 	}
 
 	UNARY = {
@@ -505,66 +603,16 @@ class MPWParser(Parser):
 		super(MPWParser, self).__init__()
 
 
-def to_b(v):
-	rv = ""
-	for i in range(0,32):
-		rv += "01"[v & 0x01]
-		v >>= 1
-	return rv[::-1]
-
-def to_cc(v):
-	# little endian
-	if not v: return ""
-	b = []
-	while v:
-		b.append(v & 0xff)
-		v >>= 8
-	if not all([x>=0x20 and x<0x7f for x in b]): return ""
-
-	return "'" + "".join( [chr(x) for x in b] ) + "'"
-
-
-def display(num):
-	# 0xffff 0b1111 'cccc'
-	value = num.value()
-	uvalue = num.unsigned_value()
-	print("0x{:08x}  0b{:032b} {}".format(uvalue, uvalue, to_cc(uvalue)))
-
-	tl = (uint32_t, int32_t, uint16_t, int16_t, uint8_t, int8_t)
-
-	nums = [num.cast(x) for x in tl]
-	nums = [x for x in nums if x.value() != value]
-
-	nums.insert(0, num)
-	for x in nums: print("({:>8}){:<32}".format(x.type().name, x.value()))
-	print()
-
-
-	#for x in num.alternates() :
-	#	print("{:24}".format(str(x)), end="")
-
-	#if num.is_signed():
-	#	print("(int32_t){:<10}  (uint32_t){:<10}".format(value, uvalue))
-	#else:
-	#	print("(uint32_t){:<10} (int32_t){:<10}".format(uvalue, value))
-
-	#
-	#print("{:10}".format(value))#, end="")
-	#
-	#tmp = num.alternates()
-	#for n in tmp:
-	#	print(str(n), end=" ")
-
-	# print()
 
 
 class Evaluator(object):
 	def __init__(self):
 		self.p = CParser()
+		self.little_endian = True
 		self.env = {}
 		self.env["_"] = Number(0, self.p.default_type)
 
-	def repl(self):
+	def repl(self, debug=False):
 		while True:
 			s = ""
 			try:
@@ -586,13 +634,83 @@ class Evaluator(object):
 				print("Unbound variable: {}".format(ex.args[0]))
 
 			except Exception as e:
-				print(e)
-				# raise
+				if debug: traceback.print_exception(None, e, None) # print_exc()
+				else: print(e)
+
+	def to_b(self, v, bits=32):
+		rv = ""
+		for i in range(0,bits):
+			rv += "01"[v & 0x01]
+			v >>= 1
+		return rv[::-1]
+
+	def to_cc(self, v):
+		if not v: return ""
+		b = []
+		while v:
+			b.append(v & 0xff)
+			v >>= 8
+		if not all([x>=0x20 and x<0x7f for x in b]): return ""
+		if not self.little_endian: b.reverse()
+		return "'" + "".join( [chr(x) for x in b] ) + "'"
+
+	def to_hex(self, v, bits=32):
+		rv = []
+		for i in range(0,bits//8):
+			rv.append(v & 0xff)
+			v >>= 8
+		if not self.little_endian: rv.reverse()
+		return " ".join( ["{:02x}".format(x) for x in rv])
+
+
+	def display(self, num):
+		# 0xffff 0b1111 'cccc'
+		value = num.value()
+		uvalue = num.unsigned_value()
+		tp = num.type()
+		print("0x{:08x}  0b{:032b} {}".format(uvalue, uvalue, self.to_cc(uvalue)))
+
+		tl = (uint64_t, int64_t, uint32_t, int32_t, uint16_t, int16_t, uint8_t, int8_t)
+
+		dd = OrderedDict()
+		dd[value] = tp
+		for tt in tl:
+			if tt.size() > tp.size(): continue
+			if tt == tp: continue
+			vv = num.unwrap_as(tt)
+			dd.setdefault(vv,tt)
+
+		for n, tt in dd.items():
+			print("({:>8}): {}".format(tt.name, n))
+
+
+		# int32_t, int16_t, int8_t: -1
+		# uint32_t: ..
+
+
+		#for x in num.alternates() :
+		#	print("{:24}".format(str(x)), end="")
+
+		#if num.is_signed():
+		#	print("(int32_t){:<10}  (uint32_t){:<10}".format(value, uvalue))
+		#else:
+		#	print("(uint32_t){:<10} (int32_t){:<10}".format(uvalue, value))
+
+		#
+		#print("{:10}".format(value))#, end="")
+		#
+		#tmp = num.alternates()
+		#for n in tmp:
+		#	print(str(n), end=" ")
+
+		# print()
+
+
 
 	def ep(self, s):
 		x = self.p.evaluate(s, self.env)
 		self.env["_"]=x
-		display(x)
+		self.display(x)
 
 	LANG = {
 		'cc': CParser,
@@ -613,6 +731,7 @@ class Evaluator(object):
 			".help                            - you are here",
 			".lang [c|pascal|merlin|orca|mpw] - set language",
 			".word [16|32|64]                 - set word size",
+			".clear                           - clear variables",
 			"",
 			sep = "\n"
 		)
@@ -627,9 +746,14 @@ class Evaluator(object):
 			self.env["_"] = Number(0, self.p.default_type)
 			return
 
+		if s == ".help":
+			self.help()
+			return
+
 		if s == ".lang":
 			print("Language:", self.p.name)
 			return
+
 		if s == ".word":
 			print("Word:", self.p.default_type.name)
 
@@ -653,11 +777,17 @@ class Evaluator(object):
 				print("Bad word size:", n)
 			return
 
+		raise RuntimeError("unknown command: {}".format(s))
 
 
 
 if __name__ == '__main__':
+	import argparse
+
+	go = argparse.ArgumentParser()
+	go.add_argument('-g', '--debug', dest='debug', action='store_true')
+	opts = go.parse_args()
 
 	repl = Evaluator()
-	repl.repl()
+	repl.repl(opts.debug)
 	exit(0)

@@ -31,6 +31,14 @@ _cast_table = (
 	0xffffffff, 0xffffffff,
 	0xffffffffffffffff, 0xffffffffffffffff,
 )
+_size_table = (
+	None,
+	None,
+	8, 8,
+	16, 16,
+	32, 32,
+	64, 64
+)
 
 class Type(Enum):
 	int8_t   = 2
@@ -45,6 +53,9 @@ class Type(Enum):
 	def range(self):
 		return _range_table[self.value]
 
+	def size(self):
+		return _size_table[self.value]
+
 	def is_signed(self):
 		return self.value & 0x01 == 0x00
 
@@ -58,10 +69,11 @@ class Type(Enum):
 		return Type(self.value | 0x01)
 
 	def cast(self, value):
-		if value in _range_table[self.value]: return value
 		mask = _cast_table[self.value]
 		value &= mask
-		if self.is_unsigned(): return value
+
+		if value in _range_table[self.value]: return value
+		# if self.is_unsigned(): return value
 		return value - 1 - mask
 
 
@@ -90,11 +102,16 @@ class Type(Enum):
 		return None
 
 
+
 globals().update(Type.__members__)
 
 if __name__ == '__main__':
 
 	print(Type.type_that_fits(1, base=uint32_t, signed=uint32_t.is_signed(), unsigned=True))
+	print(Type.common_type(int16_t, int16_t))
+	print(int16_t.cast(0x10000))
+	print(int16_t.cast(0x8000))
+	print(uint16_t.cast(0x8000))
 	exit()
 
 	int8_t = Type.int8_t
