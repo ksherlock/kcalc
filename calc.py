@@ -336,82 +336,80 @@ class PascalParser(Parser):
 			)
 		""", re.X | re.I)
 
-	BINARY = {
-		# these return a floating point result
-		# '**': (2, _binary(lambda x,y: x**y)),
-		# '/': (3, _binary(lambda x,y: x//y)), 
-
-		'*': (3, _binary(lambda x,y: x*y)),
-		'&': (3, _binary(lambda x,y: x&y)),
-		'<<': (3, _binary(lambda x,y: x<<y)),
-		'>>': (3, _binary(lambda x,y: x>>y)),
-		'div': (3, _binary(iso_pascal_division)),
-		'mod': (3, _binary(iso_pascal_modulo)),
-		'and': (3, logical_and),
-
-		'+': (4, _binary(lambda x,y: x+y)),
-		'-': (4, _binary(lambda x,y: x-y)),
-		'|': (4, _binary(lambda x,y: x|y)),
-		'!': (4, _binary(lambda x,y: x^y)),
-		'xor': (4, _binary(lambda x,y: x^y)),
-		'or': (4, logical_or),
-
-		'=': (5, _binary(lambda x,y: x==y)),
-		'<': (5, _binary(lambda x,y: x<y)),
-		'>': (5, _binary(lambda x,y: x>y)),
-		'<=': (5, _binary(lambda x,y: x<=y)),
-		'>=': (5, _binary(lambda x,y: x>=y)),
-		'<>': (5, _binary(lambda x,y: x!=y)),
+	RELOPS = {
+		'=': _binary(lambda x,y: x==y),
+		'<': _binary(lambda x,y: x<y),
+		'>': _binary(lambda x,y: x>y),
+		'<=': _binary(lambda x,y: x<=y),
+		'>=': _binary(lambda x,y: x>=y),
+		'<>': _binary(lambda x,y: x!=y),
 	}
 
-	UNARY = {
-		'+': (4, _unary(lambda x: +x)),
-		'-': (4, _unary(lambda x: -x)),
-		'~': (2, _unary(lambda x: ~x)),
-		'not': (2, _unary(lambda x: int(not x))),
+	ADDOPS = {
+		'+': _binary(lambda x,y: x+y),
+		'-': _binary(lambda x,y: x-y),
+		'|': _binary(lambda x,y: x|y),
+		'!': _binary(lambda x,y: x^y),
+		'xor': _binary(lambda x,y: x^y),
+		'or': logical_or,
+	}
+
+	MULOPS = {
+		'*': _binary(lambda x,y: x*y),
+		'&': _binary(lambda x,y: x&y),
+		'<<': _binary(lambda x,y: x<<y),
+		'>>': _binary(lambda x,y: x>>y),
+		'div': _binary(iso_pascal_division),
+		'mod': _binary(iso_pascal_modulo),
+		'and': logical_and,
+	}
+	SIGNOPS = {
+		'+': _unary(lambda x: +x),
+		'-': _unary(lambda x: -x),	
+	}
+	UNARYOPS = {
+		'~': _unary(lambda x: ~x),
+		'not': _unary(lambda x: int(not x)),
 	}
 
 	# pascal unary +- are too weird for shunting yard.
 	def _expr(self):
-		relops = ('=', '<>', '<', '>', '<=', '>=')
 		a = self._simple_expr()
 		tk = self._peek_token()
-		while tk in relops:
+		while tk in self.RELOPS:
 			tk = self._token()
 			b = self._simple_expr()
-			a = self.BINARY[tk][1](a, b)
+			a = self.RELOPS[tk](a, b)
 			tk = self._peek_token()
 		return a
 
 	def _simple_expr(self):
-		addops = ('+', '-', 'or', 'xor', '|', '!')
 		a = self._term_expr(True)
 		tk = self._peek_token()
-		while tk in addops:
+		while tk in self.ADDOPS:
 			tk = self._token()
 			b = self._term_expr()
-			a = self.BINARY[tk][1](a, b)
+			a = self.ADDOPS[tk](a, b)
 			tk = self._peek_token()
 		return a
 
 	def _term_expr(self, unary=False):
-		mulops = ('*', 'div', 'mod', 'and',  '&', '<<', '>>')
 
 		sign = None
 		if unary:
 			tk = self._peek_token()
-			if tk in ('+', '-'): sign = self._token()
+			if tk in self.SIGNOPS: sign = self._token()
 
 		a = self._factor_expr()
 		tk = self._peek_token()
-		while tk in mulops:
+		while tk in self.MULOPS:
 			tk = self._token()
 			b = self._factor_expr()
-			a = self.BINARY[tk][1](a, b)
+			a = self.MULOPS[tk](a, b)
 			tk = self._peek_token()
 
 		if sign:
-			a = self.UNARY[sign][1](a)
+			a = self.SIGNOPS[sign](a)
 		return a
 
 
@@ -421,9 +419,9 @@ class PascalParser(Parser):
 		tk = self._token()
 		if type(tk) == Number: return tk
 
-		if tk in unaryops:
+		if tk in self.UNARYOPS:
 			a = self._factor_expr()
-			return self.UNARY[tk][1](a)
+			return self.UNARYOPS[tk](a)
 
 		if tk == '(':
 			a = self._expr()
