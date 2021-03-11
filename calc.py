@@ -77,13 +77,12 @@ def orca_shift(a,b):
 
 class Parser(object):
 	"""docstring for Parser"""
-	default_type = None
+	default_int = None
+	default_bool = None
+
+	default_mutable = False
 
 	def __init__(self):
-		pass
-
-
-	def set_default_type(self, value):
 		pass
 
 	def evaluate(self, s, env={}):
@@ -124,13 +123,13 @@ class Parser(object):
 		if x: return x.lower()
 
 		x = data.get("dec", None);
-		if x: return Number(int(x, 10), self.default_type)
+		if x: return Number(int(x, 10), self.default_int)
 		x = data.get("hex", None);
-		if x: return Number(int(x, 16), self.default_type)
+		if x: return Number(int(x, 16), self.default_int)
 		x = data.get("bin", None);
-		if x: return Number(int(x, 2), self.default_type)
+		if x: return Number(int(x, 2), self.default_int)
 		x = data.get("oct", None);
-		if x: return Number(int(x, 8), self.default_type)
+		if x: return Number(int(x, 8), self.default_int)
 
 		x = data.get("id", None);
 		if x: return env[m["id"]]
@@ -139,7 +138,7 @@ class Parser(object):
 		if x:
 			xx = [ord(y) for y in x]
 			xx.reverse() # make little endian
-			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_type)
+			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_int)
 		raise Exception("Missing type...")
 
 
@@ -205,7 +204,8 @@ class Parser(object):
 class CParser(Parser):
 
 	name = 'C'
-	default_type = int32_t
+	default_int = int32_t
+	default_mutable = True
 
 	RE = re.compile(r"""
 			(?:[ \t]*)
@@ -277,7 +277,7 @@ class CParser(Parser):
 
 		if m["id"]: return env[m["id"]]
 
-		tp = self.default_type
+		tp = self.default_int
 		suffix = m["suffix"]
 		if suffix:
 			suffix = suffix.lower()
@@ -285,7 +285,7 @@ class CParser(Parser):
 				raise Exception("Invalid suffix: {}".format(suffix))
 			tp = self.SUFFIX[suffix]
 			if suffix == 'u':
-				tp = self.default_type.make_unsigned()
+				tp = self.default_int.make_unsigned()
 
 		# integer literal types:
 		# base 10 is always signed (unless explicitly unsigned)
@@ -311,10 +311,6 @@ class CParser(Parser):
 		)
 		return Number(value, tp)
 
-	def set_default_type(self, value):
-		self.default_type = value
-
-
 	def __init__(self):
 		super(CParser, self).__init__()
 
@@ -322,7 +318,8 @@ class CParser(Parser):
 class PascalParser(Parser):
 
 	name = 'Pascal'
-	default_type = int32_t
+	default_int = int32_t
+	default_mutable = True
 
 	RE = re.compile(r"""
 			(?:[ \t]*)
@@ -369,7 +366,7 @@ class PascalParser(Parser):
 	}
 	UNARYOPS = {
 		'~': _unary(lambda x: ~x),
-		'not': _unary(lambda x: int(not x)),
+		'not': _unary(lambda x: not x),
 	}
 
 	# pascal unary +- are too weird for shunting yard.
@@ -441,7 +438,7 @@ class PascalParser(Parser):
 class MerlinParser(Parser):
 
 	name = 'Merlin'
-	default_type = uint32_t
+	default_int = uint32_t
 
 	# should also have "x" for high-ascii char constant.
 	RE = re.compile(r"""
@@ -464,9 +461,9 @@ class MerlinParser(Parser):
 		'&': (1, _binary(lambda x,y: x&y)),
 		'.': (1, _binary(lambda x,y: x|y)),
 		'!': (1, _binary(lambda x,y: x^y)),
-		'>': (1, _binary(lambda x,y: int(x>y))),
-		'<': (1, _binary(lambda x,y: int(x<y))),
-		'=': (1, _binary(lambda x,y: int(x=y))),
+		'>': (1, _binary(lambda x,y: x>y)),
+		'<': (1, _binary(lambda x,y: x<y)),
+		'=': (1, _binary(lambda x,y: x==y)),
 	}
 
 	UNARY = {
@@ -481,7 +478,7 @@ class MerlinParser(Parser):
 class OrcaParser(Parser):
 
 	name = 'ORCA/M'
-	default_type = uint32_t
+	default_int = uint32_t
 
 	RE = re.compile(r"""
 			(?:[ \t]*)
@@ -506,23 +503,23 @@ class OrcaParser(Parser):
 
 		'+': (4, _binary(lambda x,y: x+y)),
 		'-': (4, _binary(lambda x,y: x-y)),
-		'.or.': (4, _binary(lambda x,y: int(bool(x) or bool(y)))),
-		'.eor.': (4, _binary(lambda x,y: int(bool(x) ^ bool(y)))),
-		'.and.': (4, _binary(lambda x,y: int(bool(x) and bool(y)))),
+		'.or.': (4, _binary(lambda x,y: bool(x) or bool(y))),
+		'.eor.': (4, _binary(lambda x,y: bool(x) ^ bool(y))),
+		'.and.': (4, _binary(lambda x,y: bool(x) and bool(y))),
 
-		'=': (5, _binary(lambda x,y: int(x==y))),
-		'<': (5, _binary(lambda x,y: int(x<y))),
-		'>': (5, _binary(lambda x,y: int(x>y))),
-		'<=': (5, _binary(lambda x,y: int(x<=y))),
-		'>=': (5, _binary(lambda x,y: int(x>=y))),
-		'<>': (5, _binary(lambda x,y: int(x!=y))),
+		'=': (5, _binary(lambda x,y: x==y)),
+		'<': (5, _binary(lambda x,y: x<y)),
+		'>': (5, _binary(lambda x,y: x>y)),
+		'<=': (5, _binary(lambda x,y: x<=y)),
+		'>=': (5, _binary(lambda x,y: x>=y)),
+		'<>': (5, _binary(lambda x,y: x!=y)),
 	}
 
 	UNARY = {
 		'+': (2, _unary(lambda x: +x)),
 		'-': (2, _unary(lambda x: -x)),
 		'~': (2, _unary(lambda x: ~x)),
-		'.not.': (2, _unary(lambda x: int(not x))),
+		'.not.': (2, _unary(lambda x: not x)),
 	}
 
 	def __init__(self):
@@ -532,7 +529,7 @@ class OrcaParser(Parser):
 class MPWParser(Parser):
 
 	name = 'MPW Asm'
-	default_type = int32_t
+	default_int = int32_t
 
 	RE = re.compile(r"""
 			(?:[ \t]*)
@@ -563,15 +560,15 @@ class MPWParser(Parser):
 
 		'<<': (7, _binary(lambda x,y: x<<y)),
 		'>>': (7, _binary(lambda x,y: x>>y)),
-		'=': (7, _binary(lambda x,y: int(x==y))),
-		'<': (7, _binary(lambda x,y: int(x<y))),
-		'>': (7, _binary(lambda x,y: int(x>y))),
-		'<=': (7, _binary(lambda x,y: int(x<=y))),
-		'≤': (7, _binary(lambda x,y: int(x<=y))),
-		'>=': (7, _binary(lambda x,y: int(x>=y))),
-		'≥': (7, _binary(lambda x,y: int(x>=y))),
-		'<>': (7, _binary(lambda x,y: int(x!=y))),
-		'≠': (5, _binary(lambda x,y: int(x!=y))),
+		'=': (7, _binary(lambda x,y: x==y)),
+		'<': (7, _binary(lambda x,y: x<y)),
+		'>': (7, _binary(lambda x,y: x>y)),
+		'<=': (7, _binary(lambda x,y: x<=y)),
+		'≤': (7, _binary(lambda x,y: x<=y)),
+		'>=': (7, _binary(lambda x,y: x>=y)),
+		'≥': (7, _binary(lambda x,y: x>=y)),
+		'<>': (7, _binary(lambda x,y: x!=y)),
+		'≠': (5, _binary(lambda x,y: x!=y)),
 
 
 		'or': (9, _binary(lambda x,y: x | y)),
@@ -608,7 +605,7 @@ class Evaluator(object):
 		self.p = CParser()
 		self.little_endian = True
 		self.env = {}
-		self.env["_"] = Number(0, self.p.default_type)
+		self.env["_"] = Number(0, self.p.default_int)
 
 	def repl(self, debug=False):
 		while True:
@@ -632,7 +629,8 @@ class Evaluator(object):
 				print("Unbound variable: {}".format(ex.args[0]))
 
 			except Exception as e:
-				if debug: traceback.print_exception(None, e, None) # print_exc()
+				if debug:
+					traceback.print_exc() 
 				else: print(e)
 
 	def to_b(self, v, bits=32):
@@ -741,7 +739,7 @@ class Evaluator(object):
 
 		if s == ".clear":
 			self.env = {}
-			self.env["_"] = Number(0, self.p.default_type)
+			self.env["_"] = Number(0, self.p.default_int)
 			return
 
 		if s == ".help":
@@ -753,13 +751,18 @@ class Evaluator(object):
 			return
 
 		if s == ".word":
-			print("Word:", self.p.default_type.name)
+			print("Word:", self.p.default_int.name)
 
 		m = re.match(r"\.lang\s+([A-Za-z]+)", s)
 		if m:
 			lang = m[1].lower()
 			if lang in self.LANG:
 				self.p = self.LANG[lang]()
+
+				t = self.p.default_int
+				Number.set_default_int(t)
+				Number.set_default_bool(t)
+
 				print("Language:", self.p.name)
 			else:
 				print("Bad language:", lang)
@@ -768,9 +771,14 @@ class Evaluator(object):
 		m = re.match(r"\.word\s+(\d+)", s)
 		if m:
 			n = int(m[1],10)
-			if n in self.WORD:
-				self.p.set_default_type(self.WORD[n])
-				print("Word:", self.p.default_type.name)
+			if not self.p.default_mutable:
+				print("Word size not mutable")
+			elif n in self.WORD:
+				t = self.WORD[n]
+				Number.set_default_int(t)
+				Number.set_default_bool(t)
+				self.p.default_int = t
+				print("Word:", t.name)
 			else:
 				print("Bad word size:", n)
 			return

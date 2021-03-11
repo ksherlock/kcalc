@@ -3,19 +3,34 @@ from type import *
 
 
 
-default_type = int32_t
+default_int = int32_t
+default_bool = int32_t
 
 
 class Number(object):
 	__slots__  = '_value', '_type', '_exception'
+
+	@staticmethod
+	def set_default_int(t):
+		global default_int
+		default_int = t
+
+	@staticmethod
+	def set_default_bool(t):
+		global default_bool
+		default_bool = t
 
 
 	def __init__(self, *args):
 		if len(args) == 1:
 			rhs = args[0]
 			if type(rhs) == int:
-				self._value = default_type.cast(rhs)
-				self._type = default_type
+				self._value = default_int.cast(rhs)
+				self._type = default_int
+				self._exception = None
+			elif type(rhs) == bool:
+				self._value = +rhs
+				self._type = default_bool or default_int
 				self._exception = None
 			elif type(rhs) == Number:
 				self._value = rhs._value
@@ -80,11 +95,13 @@ def unary_op(a, op):
 	if a._exception: return a
 	v = a._value
 	t = a._type
-	# if t < default_type:
-	# 	t = default_type
+	# if t < default_int:
+	# 	t = default_int
 	# 	v = coerce(v, t)
 	try:
-		return Number(+op(v), t)
+		v = op(v)
+		if type(v) == bool: return Number(v)
+		return Number(v, t)
 	except Exception as e:
 		return Number(e)
 
@@ -92,12 +109,14 @@ def binary_op(a, b, op):
 	if a._exception: return a
 	if b._exception: return b
 	t = Type.common_type(a._type, b._type)
-	# if t < default_type: t = default_type
+	# if t < default_int: t = default_int
 	aa = t.cast(a._value) # need to coerce if swapping from int32 -> uint32
 	bb = t.cast(b._value)
 
 	try:
-		return Number(+op(aa,bb), t)
+		v = op(aa,bb)
+		if type(v) == bool: return Number(v)
+		return Number(v, t)
 	except Exception as e:
 		return Number(e)
 
@@ -106,18 +125,18 @@ def binary_op(a, b, op):
 # special case for short-circuiting logical ops.
 def logical_or(a, b):
 	if a._exception: return a
-	if a._value: return Number(1, a._type)
+	if a._value: return Number(True, a._type)
 	if b._exception: return b
-	return Number(int(b._value != 0), b._type)
+	return Number(b._value != 0, b._type)
 
 def logical_and(a, b):
 	if a._exception: return a
-	if not a._value: return Number(0, a._type)
+	if not a._value: return Number(False, a._type)
 	if b._exception: return b
-	return Number(int(b._value != 0), b._type)
+	return Number(b._value != 0, b._type)
 
 def logical_xor(a, b):
 	if a._exception: return a
 	if b._exception: return b
-	return Number(int(bool(a._value) ^ bool(b._value)), a._type)
+	return Number(bool(a._value) ^ bool(b._value), a._type)
 
