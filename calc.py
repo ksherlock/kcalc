@@ -205,12 +205,11 @@ class Parser(object):
 
 #
 # C TODO
-# (cast) - can treat as unary op
 # sizeof
 # sizeof should be a size_t, not a default int.
-# sizeof (type) -- only when () present.
 # sizeof (1/0) is not an error. -- exceptions need to retain the type.
 # << and >> use the lhs type
+# promote numbers to the default integer in an expression, eg (int16_t)1 is 16-bit, +(int16_t)1 is 32-bit
 class CParser(Parser):
 
 	name = 'C'
@@ -229,6 +228,20 @@ class CParser(Parser):
 					)
 					(?P<suffix>[uUlL]*)
 				)
+				| \(\s*
+					(?P<cast>
+						u?int64_t|
+						u?int32_t|
+						u?int16_t|
+						u?int8_t|
+						((signed|unsigned)\s+)?char|
+						((signed|unsigned)\s+)?short(\s+int)?|
+						(signed|unsigned)|
+						((signed|unsigned)\s+)?int|
+						((signed|unsigned)\s+)?long(\s+int)?|
+						((signed|unsigned)\s+)?long\s+long(\s+int)?|
+					)
+					\s*\)
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
@@ -277,6 +290,40 @@ class CParser(Parser):
 		'll': int64_t,
 	}
 
+
+	def parse_type(self, s):
+
+		for x in Type:
+			if x.name == s: return x
+
+
+		a = re.split(r'\s+', s)
+		unsigned = False
+		if len(a) > 1 and a[-1] == 'int':
+			a.pop()
+		if len(a) and a[0] in ('signed', 'unsigned'):
+			unsigned = a[0] == 'unsigned'
+			a = a[1:]
+
+		nm = ' '.join(a)
+		tp = None
+		if nm == '' or nm == 'int':
+			tp = self.default_int
+		elif nm == 'char':
+			tp = int8_t
+		elif nm == 'short':
+			tp = int16_t
+		elif nm == 'long':
+			tp = int32_t
+		elif nm == 'long long':
+			tp = int64_t
+
+		if not tp: raise Exception("Bad type: {}".format(s))
+
+		if unsigned: return tp.make_unsigned()
+		return tp
+
+
 	def _convert_token(self, m, env):
 
 		if m["op"]: return m["op"]
@@ -287,6 +334,9 @@ class CParser(Parser):
 			return Number(reduce(lambda x,y: (x << 8) + y, xx))
 
 		if m["id"]: return env[m["id"]]
+
+		tp = m["cast"]
+		if tp: return self.parse_type(tp)
 
 		tp = self.default_int
 		suffix = m["suffix"]
@@ -321,6 +371,31 @@ class CParser(Parser):
 			unsigned = unsigned
 		)
 		return Number(value, tp)
+
+
+
+	def _term(self):
+		tk = self._peek_token()
+		if type(tk) == Type:
+			tp = self._token()
+			# type cast
+			x = self._term()
+			if x == None: raise Exception("Syntax error: expected terminal, found EOF")
+			return x.cast(tp)
+
+		# special case for sizeof(type)
+		if tk == 'sizeof':
+			_ = self._token()
+			tk = self._peek_token()
+			if type(tk) == Type:
+				tp = self._token()
+			else:
+				x = self._term()
+				tp = x._type # todo - exceptional support.
+			return Number(tp.bits() >> 3) # TODO - size_t
+
+		return super()._term()
+
 
 	def __init__(self):
 		super(CParser, self).__init__()
