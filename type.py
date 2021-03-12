@@ -53,7 +53,7 @@ class Type(Enum):
 	def range(self):
 		return _range_table[self.value]
 
-	def size(self):
+	def bits(self):
 		return _size_table[self.value]
 
 	def is_signed(self):

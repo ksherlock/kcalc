@@ -201,6 +201,16 @@ class Parser(object):
 		return operands[0]
 
 
+
+
+#
+# C TODO
+# (cast) - can treat as unary op
+# sizeof
+# sizeof should be a size_t, not a default int.
+# sizeof (type) -- only when () present.
+# sizeof (1/0) is not an error. -- exceptions need to retain the type.
+# << and >> use the lhs type
 class CParser(Parser):
 
 	name = 'C'
@@ -219,9 +229,9 @@ class CParser(Parser):
 					)
 					(?P<suffix>[uUlL]*)
 				)
+				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
-				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>])
 			)
 		""", re.X)
 
@@ -255,6 +265,7 @@ class CParser(Parser):
 		'-': (2, _unary(lambda x: -x)),
 		'~': (2, _unary(lambda x: ~x)),
 		'!': (2, _unary(lambda x: not x)),
+		'sizeof': (2, lambda n: n if n._exception else Number(n._type.bits() >> 3)),
 	}
 	SUFFIX = {
 		'u': None,
@@ -671,7 +682,7 @@ class Evaluator(object):
 		dd = OrderedDict()
 		dd[value] = tp
 		for tt in tl:
-			if tt.size() > tp.size(): continue
+			if tt.bits() > tp.bits(): continue
 			if tt == tp: continue
 			vv = num.unwrap_as(tt)
 			dd.setdefault(vv,tt)
