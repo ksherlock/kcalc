@@ -205,8 +205,6 @@ class Parser(object):
 
 #
 # C TODO
-# sizeof
-# sizeof should be a size_t, not a default int.
 # sizeof (1/0) is not an error. -- exceptions need to retain the type.
 # << and >> use the lhs type
 # promote numbers to the default integer in an expression, eg (int16_t)1 is 16-bit, +(int16_t)1 is 32-bit
@@ -214,6 +212,7 @@ class CParser(Parser):
 
 	name = 'C'
 	default_int = int32_t
+	default_size_t = uint64_t
 	default_mutable = True
 
 	RE = re.compile(r"""
@@ -234,12 +233,13 @@ class CParser(Parser):
 						u?int32_t|
 						u?int16_t|
 						u?int8_t|
+						size_t|
 						((signed|unsigned)\s+)?char|
 						((signed|unsigned)\s+)?short(\s+int)?|
 						(signed|unsigned)|
 						((signed|unsigned)\s+)?int|
 						((signed|unsigned)\s+)?long(\s+int)?|
-						((signed|unsigned)\s+)?long\s+long(\s+int)?|
+						((signed|unsigned)\s+)?long\s+long(\s+int)?
 					)
 					\s*\)
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
@@ -317,6 +317,8 @@ class CParser(Parser):
 			tp = int32_t
 		elif nm == 'long long':
 			tp = int64_t
+		elif nm == 'size_t':
+			tp = self.default_size_t
 
 		if not tp: raise Exception("Bad type: {}".format(s))
 
@@ -392,7 +394,7 @@ class CParser(Parser):
 			else:
 				x = self._term()
 				tp = x._type # todo - exceptional support.
-			return Number(tp.bits() >> 3) # TODO - size_t
+			return Number(tp.bits() >> 3, self.default_size_t)
 
 		return super()._term()
 
