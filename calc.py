@@ -533,9 +533,10 @@ class MerlinParser(Parser):
 			(?:[ \t]*)
 			(?:
 				  \$(?P<hex>[A-Fa-f0-9]+)
-				| %(?P<bin>[01]+)
+				| %(?P<bin>[01_]+)
 				| (?P<dec>[0-9]+)
-				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
+				| "(?P<cch>[^"\x00-\x1f\x7f]{1,4})"
 				| (?P<op>[-+*/!.&<>=])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
@@ -558,6 +559,31 @@ class MerlinParser(Parser):
 		'+': (1, _unary(lambda x: +x)),
 		'-': (1, _unary(lambda x: -x)),	
 	}
+
+
+	def _convert_token(self, m, env):
+
+		x = m["bin"]
+		if x:
+			x = x.replace('_', '')
+			if not x: raise Exception("Syntax error")
+			return Number(int(x, 2), self.default_int)
+
+		# x = m["hex"]
+		# if x:
+		# 	x = x.replace('_', '')
+		# 	if not x: raise Exception("Syntax error")
+		# 	return Number(int(x, 16), self.default_int)
+
+
+		x = m["cch"]
+		if x:
+			xx = [ord(y) | 0x80 for y in x]
+			xx.reverse() # make little endian
+			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_int)
+
+		return super()._convert_token(m, env)
+
 
 	def __init__(self):
 		super(MerlinParser, self).__init__()
