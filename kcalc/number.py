@@ -1,5 +1,5 @@
 
-from type import *
+from .type import *
 
 
 

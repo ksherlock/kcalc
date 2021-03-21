@@ -9,8 +9,8 @@ import traceback
 
 # WS = re.compile("[ \t]*")
 
-from number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor
-from type import *
+from .number import Number, unary_op, binary_op, logical_or, logical_and, logical_xor
+from .type import *
 
 class NegativeDivisionError(ArithmeticError):
 	def __init__(self, /, *args, **kwargs):
@@ -899,9 +899,7 @@ class Evaluator(object):
 
 		raise RuntimeError("unknown command: {}".format(s))
 
-
-
-if __name__ == '__main__':
+def main():
 	import argparse
 
 	go = argparse.ArgumentParser()
@@ -911,3 +909,4 @@ if __name__ == '__main__':
 	repl = Evaluator()
 	repl.repl(opts.debug)
 	exit(0)
+
