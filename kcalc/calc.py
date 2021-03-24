@@ -244,7 +244,7 @@ class CParser(Parser):
 					\s*\)
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
-				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
 			)
 		""", re.X)
 
@@ -415,7 +415,7 @@ class PascalParser(Parser):
 				  \$(?P<hex>[A-Fa-f0-9]+)
 				| %(?P<bin>[01]+)
 				| (?P<dec>[0-9]+)
-				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
 				| (?P<op>div|mod|and|or|not|xor|<<|>>|<=|>=|<>|:=|[-+*=<>&|!~()])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
@@ -601,7 +601,7 @@ class OrcaParser(Parser):
 				| %(?P<bin>[01]+)
 				| (?P<dec>[0-9]+)
 				| @(?P<oct>[0-7]+)
-				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
 				| (?P<op>\.not\.|\.or\.|\.eor\.|\.and\.|<=|>=|<>|[-+*/!|=<>()])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
@@ -651,7 +651,7 @@ class MPWParser(Parser):
 				  \$(?P<hex>[A-Fa-f0-9]+)
 				| %(?P<bin>[01]+)
 				| (?P<dec>[0-9]+)
-				| '(?P<cc>[^'\x00-\x1fx7f]{1,4})'
+				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
 				| (?P<op>not|div|mod|and|or|xor|eor|<=|>=|<>|<<|>>|\*\*|\+\+|--|//|[-+*/=<>()¬≈÷≠≤≥Ω])
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 			)
