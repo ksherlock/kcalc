@@ -244,9 +244,31 @@ class CParser(Parser):
 					\s*\)
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
-				| '(?P<cc>[^'\x00-\x1f\x7f]{1,4})'
+				| '(?P<cc>
+					(
+						[^'\\\x00-\x1f\x7f] |
+						\\ ['"?\\abfnrtv] |
+						\\ ([0-7]{1,3}) |
+						\\ [xX] ([0-9a-fA-F]{1,}) # no length limit. 
+					)
+					{1,4}
+				)'
 			)
 		""", re.X)
+
+	CHAR_DECODE = {
+		'\'': 0x27,
+		'\"': 0x22,
+		'\\': 0x5c,
+		'?': 0x3f,
+		'a': 0x07,
+		'b': 0x08,
+		'f': 0x0c,
+		'n': 0x0a,
+		'r': 0x0d,
+		't': 0x09,
+		'v': 0x0b,
+	}
 
 	# todo - boolean ops should drop back to the default type.
 	BINARY = {
@@ -326,14 +348,77 @@ class CParser(Parser):
 		return tp
 
 
+	def parse_char_constant(self, s):
+		# n.b. c++ 'a' is char, c 'a' is int.
+		# c++ multichar string is int.
+
+		# TODO -- throw if hex/octal constant out of range.
+		# TODO -- error on bad escape seq?
+
+		# TODO - \unnnn, \Unnnnnnnn escapes.
+		# TODO - u8, u, U, L, prefixes.
+
+		_oct = "01234567"
+		_hex = "0123456789abcdefABCDEF"
+
+		st = 0
+		value = 0
+		tmp = 0
+		for c in s:
+
+			if st == 2: # octal
+				if c in _oct:
+					tmp <<= 3
+					tmp |= int(c, 8)
+					continue
+				value <<= 8
+				value |= (tmp & 0xff)
+				st = 0
+
+			if st == 3: # hex
+				if c in _hex:
+					tmp <<= 4
+					tmp |= int(c, 16)
+					continue
+				value <<= 8
+				value |= (tmp & 0xff)
+				st = 0
+
+			if st == 1:
+				if c in _oct:
+					tmp = int(c, 8)
+					st = 2
+				elif c in "xX":
+					tmp = 0
+					st = 3
+				else:
+					value <<= 8
+					value |= self.CHAR_DECODE[c]
+					st = 0
+				continue
+
+			if st == 0:
+				if c == '\\':
+					st = 1
+				else:
+					value <<= 8
+					value |= ord(c)
+				continue
+
+		#
+		if st in (2,3):
+			value <<= 8
+			value |= (tmp & 0xff)
+
+		return value
+
+
 	def _convert_token(self, m, env):
 
 		if m["op"]: return m["op"]
 
 		if m["cc"]:
-			xx = [ord(x) for x in m["cc"]]
-			xx.reverse() # make little endian
-			return Number(reduce(lambda x,y: (x << 8) + y, xx))
+			return Number(self.parse_char_constant(m["cc"]))
 
 		if m["id"]: return env[m["id"]]
 
