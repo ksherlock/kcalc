@@ -364,6 +364,7 @@ class CParser(Parser):
 		st = 0
 		value = 0
 		tmp = 0
+		ucount = 0
 		for c in s:
 
 			if st == 2: # octal
@@ -391,6 +392,10 @@ class CParser(Parser):
 				elif c in "xX":
 					tmp = 0
 					st = 3
+				elif c in "uU":
+					st = 4
+					tmp = 0
+					ucount = 4 if c == "u" else 8
 				else:
 					value <<= 8
 					value |= self.CHAR_DECODE[c]
@@ -404,6 +409,16 @@ class CParser(Parser):
 					value <<= 8
 					value |= ord(c)
 				continue
+
+			if st == 4: # \u
+				tmp <<= 4
+				tmp |= int(c, 16);
+				ucount -= 1
+				if not ucount:
+					value |= (tmp & 0xff)
+					st = 0
+				continue
+
 
 		#
 		if st in (2,3):
