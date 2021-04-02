@@ -234,12 +234,10 @@ class CParser(Parser):
 						u?int16_t|
 						u?int8_t|
 						size_t|
-						((signed|unsigned)\s+)?char|
-						((signed|unsigned)\s+)?short(\s+int)?|
-						(signed|unsigned)|
-						((signed|unsigned)\s+)?int|
-						((signed|unsigned)\s+)?long(\s+int)?|
-						((signed|unsigned)\s+)?long\s+long(\s+int)?
+						(
+							(signed|unsigned|char|short|int|long)
+							(\s+(signed|unsigned|char|short|int|long))*
+						)
 					)
 					\s*\)
 				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
@@ -313,38 +311,53 @@ class CParser(Parser):
 	}
 
 
-	def parse_type(self, s):
+	def parse_type(self, q):
+
+		q = q.strip()
+		if not q: raise Exception("Missing type")
+
+		if q == 'size_t': return self.default_size_t
 
 		for x in Type:
-			if x.name == s: return x
+			if x.name == q: return x
+
+		a = re.split(r'\s+', q)
+
+		unsigned = 0
+		signed = 0
+		c = 0
+		s = 0
+		i = 0
+		l = 0
+		ll = 0
 
 
-		a = re.split(r'\s+', s)
-		unsigned = False
-		if len(a) > 1 and a[-1] == 'int':
-			a.pop()
-		if len(a) and a[0] in ('signed', 'unsigned'):
-			unsigned = a[0] == 'unsigned'
-			a = a[1:]
+		for x in a:
+			if x == 'unsigned': unsigned += 1
+			elif x == 'signed': signed += 1
+			elif x == 'char': c += 1
+			elif x == 'short': s += 1
+			elif x == 'int': i += 1
+			elif x == 'long': l += 1
+			else: raise Exception("Bad type: {}".format(q))
 
-		nm = ' '.join(a)
+		if l == 2: ll = 1; l = 0
+		if signed + unsigned > 1: raise Exception("Bad type: {}".format(q))
+		if i + c > 1: raise Exception("Bad type: {}".format(q))
+		if c + s + l + ll > 1: raise Exception("Bad type: {}".format(q))
+
+		if c + s + i + l + ll == 0: i = 1
+
 		tp = None
-		if nm == '' or nm == 'int':
-			tp = self.default_int
-		elif nm == 'char':
-			tp = int8_t
-		elif nm == 'short':
-			tp = int16_t
-		elif nm == 'long':
-			tp = int32_t
-		elif nm == 'long long':
-			tp = int64_t
-		elif nm == 'size_t':
-			tp = self.default_size_t
+		if c: tp = int8_t
+		elif s: tp = int16_t
+		elif l: tp = int32_t
+		elif ll: tp = int64_t
+		elif i: tp = self.default_int
+		else: raise Exception("Bad type: {}".format(q))
 
-		if not tp: raise Exception("Bad type: {}".format(s))
 
-		if unsigned: return tp.make_unsigned()
+		if unsigned: tp = tp.make_unsigned()
 		return tp
 
 
