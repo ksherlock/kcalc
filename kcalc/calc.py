@@ -745,7 +745,6 @@ class OrcaParser(Parser):
 	UNARY = {
 		'+': (2, _unary(lambda x: +x)),
 		'-': (2, _unary(lambda x: -x)),
-		'~': (2, _unary(lambda x: ~x)),
 		'.not.': (2, _unary(lambda x: not x)),
 	}
 
