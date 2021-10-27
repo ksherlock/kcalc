@@ -139,6 +139,7 @@ class Parser(object):
 			xx = [ord(y) for y in x]
 			xx.reverse() # make little endian
 			return Number(reduce(lambda x,y: (x << 8) + y, xx), self.default_int)
+
 		raise Exception("Missing type...")
 
 
@@ -825,6 +826,32 @@ class MPWParser(Parser):
 
 
 
+class NLParser(Parser):
+	name = "Nifty List"
+	default_int = int32_t
+	RE = re.compile(r"""
+			(?:[ \t]*)
+			(?:
+				  (?P<hex>[A-Fa-f0-9]+)
+				| \#(?P<dec>[0-9]+)
+				| "(?P<cc>[^"\x00-\x1f\x7f]{1,4})"
+				| (?P<op>[-+*])
+				| \#(?P<id>[_A-Za-z][_A-Za-z0-9]*)
+			)
+		""", re.X | re.I)
+
+	UNARY = {
+		'-': (1, _unary(lambda x: -x)),
+	}
+	BINARY = {
+		'+': (1, _binary(lambda x,y: x+y)),
+		'-': (1, _binary(lambda x,y: x-y)),
+		'*': (1, _binary(lambda x,y: x-y)),
+	}
+
+
+	def __init__(self):
+		super(NLParser, self).__init__()
 
 class Evaluator(object):
 	def __init__(self):
@@ -941,6 +968,7 @@ class Evaluator(object):
 		'merlin': MerlinParser,
 		'orca': OrcaParser,
 		'mpw': MPWParser,
+		'nl': NLParser,
 	}
 	WORD = {
 		16: int16_t,
