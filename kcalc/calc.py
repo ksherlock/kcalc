@@ -976,68 +976,145 @@ class Evaluator(object):
 		64: int64_t,
 	}
 
-	def help(self):
+	def dot_help(self, argv):
 		print(
-			".help                            - you are here",
-			".lang [c|pascal|merlin|orca|mpw] - set language",
-			".word [16|32|64]                 - set word size",
-			".clear                           - clear variables",
+			".help                               - you are here",
+			".lang [c|pascal|merlin|orca|mpw|nl] - set language",
+			".word [16|32|64]                    - set word size",
+			".clear                              - clear variables",
 			"",
 			sep = "\n"
 		)
 
-	def dot(self, s):
+	def dot_ascii(self, argv):
+		print(
+			"00 nul   01 soh   02 stx   03 etx   04 eot   05 enq   06 ack   07 bel",
+			"08 bs    09 ht    0a lf    0b vt    0c ff    0d cr    0e so    0f si",
+			"10 dle   11 dc1   12 dc2   13 dc3   14 dc4   15 nak   16 syn   17 etb",
+			"18 can   19 em    1a sub   1b esc   1c fs    1d gs    1e rs    1f us",
+			"20 sp    21  !    22  \"    23  #    24  $    25  %    26  &    27  '",
+			"28  (    29  )    2a  *    2b  +    2c  ,    2d  -    2e  .    2f  /",
+			"30  0    31  1    32  2    33  3    34  4    35  5    36  6    37  7",
+			"38  8    39  9    3a  :    3b  ;    3c  <    3d  =    3e  >    3f  ?",
+			"40  @    41  A    42  B    43  C    44  D    45  E    46  F    47  G",
+			"48  H    49  I    4a  J    4b  K    4c  L    4d  M    4e  N    4f  O",
+			"50  P    51  Q    52  R    53  S    54  T    55  U    56  V    57  W",
+			"58  X    59  Y    5a  Z    5b  [    5c  \\    5d  ]    5e  ^    5f  _",
+			"60  `    61  a    62  b    63  c    64  d    65  e    66  f    67  g",
+			"68  h    69  i    6a  j    6b  k    6c  l    6d  m    6e  n    6f  o",
+			"70  p    71  q    72  r    73  s    74  t    75  u    76  v    77  w",
+			"78  x    79  y    7a  z    7b  {    7c  |    7d  }    7e  ~    7f del",
+			sep="\n"
+		)
 
-		if s == ".quit":
-			raise EOFError()
+	def dot_clear(self, argv):
+		self.env = {}
+		self.env["_"] = Number(0, self.p.default_int)
 
-		if s == ".clear":
-			self.env = {}
-			self.env["_"] = Number(0, self.p.default_int)
+	def dot_quit(self, argv):
+		raise EOFError()
+
+
+	def dot_lang(self, argv):
+		if len(argv) > 1:
+			print(".lang [language]")
 			return
+		if len(argv) == 1:
+			lang = argv[0].lower()
 
-		if s == ".help":
-			self.help()
-			return
-
-		if s == ".lang":
-			print("Language:", self.p.name)
-			return
-
-		if s == ".word":
-			print("Word:", self.p.default_int.name)
-
-		m = re.match(r"\.lang\s+([A-Za-z]+)", s)
-		if m:
-			lang = m[1].lower()
 			if lang in self.LANG:
 				self.p = self.LANG[lang]()
 
 				t = self.p.default_int
 				Number.set_default_int(t)
 				Number.set_default_bool(t)
-
-				print("Language:", self.p.name)
 			else:
 				print("Bad language:", lang)
-			return
+				return
 
-		m = re.match(r"\.word\s+(\d+)", s)
-		if m:
-			n = int(m[1],10)
+		print("Language:", self.p.name)
+
+	def dot_word(self, argv):
+		if len(argv) > 1:
+			print(".word [size]")
+			return
+		if len(argv) == 1:
+
 			if not self.p.default_mutable:
 				print("Word size not mutable")
-			elif n in self.WORD:
+				return
+
+			n = argv[0]
+			if not n.isdigit():
+				print(".word [size]")
+				return
+			n = int(n, 10)
+
+			if n in self.WORD:
 				t = self.WORD[n]
 				Number.set_default_int(t)
 				Number.set_default_bool(t)
 				self.p.default_int = t
-				print("Word:", t.name)
 			else:
-				print("Bad word size:", n)
-			return
+				print("Invalid word size:", n)
+				return
 
-		raise RuntimeError("unknown command: {}".format(s))
+		print("Word:", self.p.default_int.name)
+
+
+
+	DOT_FUNCTIONS = {
+		'.lang': dot_lang,
+		'.help': dot_help,
+		'.clear': dot_clear,
+		'.word': dot_word,
+		'.ascii': dot_ascii,
+	}
+
+
+	def build_argv(self, s):
+
+		argv = []
+		s = s.strip()
+		scratch = None
+		st = None
+
+		for c in s:
+
+			if st:
+				if c == st:
+					st = None
+					continue
+				scratch += c
+				continue
+
+			if c in "'\"":
+				st = c
+				if not scratch: scratch = ""
+				continue
+
+			if c.isspace():
+				if scratch:
+					argv.append(scratch)
+					scratch = None
+				continue
+
+			if not scratch: scratch = ""
+			scratch += c
+
+		if st: raise Exception("Unterminated string")
+		if scratch: argv.append(scratch)
+		return argv
+
+
+	def dot(self, s):
+
+		[command, *argv] = self.build_argv(s)
+
+		if command in self.DOT_FUNCTIONS:
+			self.DOT_FUNCTIONS[command](self, argv)
+		else:
+			raise RuntimeError("unknown command: {}".format(command))
 
 def main():
 	import argparse
