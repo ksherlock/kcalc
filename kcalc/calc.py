@@ -85,6 +85,9 @@ class Parser(object):
 	def __init__(self):
 		pass
 
+	def help(self):
+		pass
+
 	def evaluate(self, s, env={}):
 		self._tokens = self._tokenize(s, env)
 		x = self._expr()
@@ -658,7 +661,7 @@ class MerlinParser(Parser):
 
 	BINARY = {
 		'*': (1, _binary(lambda x,y: x*y)),
-		'/': (1, _binary(lambda x,y: -1 if y ==0 else x//y )),
+		'/': (1, _binary(lambda x,y: -1 if y == 0 else x//y )),
 		'+': (1, _binary(lambda x,y: x+y)),
 		'-': (1, _binary(lambda x,y: x-y)),
 		'&': (1, _binary(lambda x,y: x&y)),
@@ -701,6 +704,26 @@ class MerlinParser(Parser):
 
 	def __init__(self):
 		super(MerlinParser, self).__init__()
+
+	def help(self):
+		print(
+			"Merlin Assembler",
+			"----------------",
+			" +            Unary no-op",
+			" -            Unary negation",
+			" *            Multiplication",
+			" /            Division",
+			" +            Addition",
+			" -            Subtraction",
+			" &            Bitwise AND",
+			" .            Bitwise OR",
+			" !            Bitwise exclusive-OR",
+			" >            Greater than",
+			" <            Less than",
+			" =            Equal to",
+
+			sep = "\n"
+		)
 
 
 class OrcaParser(Parser):
@@ -809,8 +832,6 @@ class MPWParser(Parser):
 
 		'and': (8, _binary(lambda x,y: x & y)),
 		'**': (8, _binary(lambda x,y: x & y)),
-
-
 	}
 
 	UNARY = {
@@ -820,6 +841,33 @@ class MPWParser(Parser):
 		'not': (2, _unary(lambda x: x ^ 1)),
 		'¬': (2, _unary(lambda x: x ^ 1)),
 	}
+
+	def help(self):
+		print(
+			"MPW Assembler",
+			"-------------",
+			" ()           Grouping",
+			" ≈            One's complement",
+			" ¬  NOT       Logical NOT",
+			" -            Unary negation",
+			" *            Multiplication",
+			" /  DIV ÷     Division",
+			" // MOD ÷     Modulus division",
+			" +            Addition",
+			" -            Subtraction",
+			" >>           Shift right",
+			" <<           Shift left",
+			" =            Equal to",
+			" <> ≠         Not equal to",
+			" <            Less than",
+			" >            Greater than",
+			" <= ≤         Less than or equal to",
+			" >= ≥         Greater than or equal to",
+			" ** AND       AND",
+			" ++ OR  Ω     OR", # MPW Asm IIgs says Ω ; MPW Asm says |
+			" -- XOR EOR   Exclusive-OR\n",
+			sep = "\n"
+		)
 
 	def __init__(self):
 		super(MPWParser, self).__init__()
@@ -977,14 +1025,19 @@ class Evaluator(object):
 	}
 
 	def dot_help(self, argv):
+
+		self.p.help();
+		print()
 		print(
 			".help                               - you are here",
 			".lang [c|pascal|merlin|orca|mpw|nl] - set language",
 			".word [16|32|64]                    - set word size",
+			".ascii                              - print ASCII chart",
 			".clear                              - clear variables",
 			"",
 			sep = "\n"
 		)
+
 
 	def dot_ascii(self, argv):
 		print(
