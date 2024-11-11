@@ -6,6 +6,7 @@ import re
 from functools import reduce
 from collections import OrderedDict
 import traceback
+import math
 
 # WS = re.compile("[ \t]*")
 
@@ -1115,6 +1116,170 @@ class Evaluator(object):
 		print("Word:", self.p.default_int.name)
 
 
+	def dot_factor(self, argv):
+		# factor a number...
+		if len(argv) != 1:
+			print(".factor number")
+			return
+
+		n = int(argv[0], 10) # todo -- be smarter....
+
+		n = abs(n)
+		if n < 3:
+			print("prime.")
+			return
+
+		factors = []
+		while (n & 0x01) == 0:
+			n >>= 1
+			factors.append(2)
+
+		limit = math.floor(math.sqrt(n))+1
+		for denom in range(3,limit, 2):
+			while n % denom == 0: #== (n // denom) * denom:
+				factors.append(denom)
+				n //= denom
+			if denom >= n: break
+
+		if len(factors):
+			if n>1: factors.append(n)
+			print(" * ".join([str(x) for x in factors]))
+		else:
+			print("prime.")
+
+
+	def dot_magic_divisor(self, argv):
+		# hacker's delight magic numbers for division via multiplication.
+		# see also
+		# https://chromium.googlesource.com/v8/v8/+/1210d0c/src/base/division-by-constant.cc
+		if len(argv) != 1:
+			print(".magic denominator")
+			return
+
+		d = int(argv[0], 10) # todo -- be smarter....
+
+		bits = Number.get_default_int().bits()
+		mu = self.dot_magic_unsigned(d, bits)
+		ms = self.dot_magic_signed(d, bits)
+
+		magic, shift, addend = mu
+		if addend:
+			print("unsigned: (((n * {}) >> {}) + n) >> {}".format(
+				magic, bits, shift 
+			))
+		else:
+			print("unsigned: (n * {}) >> {}) >> {}".format(
+				magic, bits, shift
+			))
+		# add 1 if n is negative???
+
+		if mu != ms:
+			magic, shift, _ = ms
+
+			print("signed:   (n * {}) >> {}) >> {}".format(
+				magic, bits, shift
+			))
+
+
+
+	def dot_magic_unsigned(self, d, bits):
+
+		two31 = 1 << (bits-1)
+		two32 = 1 << bits
+		two31m1 = two31-1
+
+
+		addind = False
+		nc = two32 - 1 - (two32 - d) % d
+
+		p = bits - 1
+		q1 = two31 // nc
+		r1 = two31 - (q1 * nc)
+		q2 = two31m1 // d
+		r2 = two31m1 - (q2*d)
+
+		while True:
+
+			p += 1
+			if r1 > (nc - r1):
+				q1 *= 2
+				r1 *= 2
+				q1 += 1
+				r1 -= nc
+			else:
+				q1 *= 2
+				r1 *= 2
+
+			if (r2 + 1) >= (d - r2):
+				if q2 >= two31m1: addind = True
+				q2 *= 2
+				r2 *= 2
+				q2 += 1
+				r2 += 1 - d
+			else:
+				if q2 >= two31: addind = True
+				q2 *= 2
+				r2 *= 2
+				r2 += 1
+
+			delta = d - 1 - r2
+
+			if p >= (bits * 2): break
+			if q1 < delta: continue
+			if (q1 == delta) and (r1 == 0): continue
+			break
+
+		magic = q2 + 1
+		if magic >= two32: magic -= two32
+		shift = p - bits
+		return magic, shift, addind
+
+
+
+	def dot_magic_signed(self, d, bits):
+
+		two31 = 1 << (bits-1)
+		two32 = 1 << bits
+		two31m1 = two31-1
+
+		ad = abs(d)
+
+		t = two31 + (d >> (bits - 1))
+		anc = t - 1 - t%ad
+		p = bits - 1
+		q1 = two31 // anc
+		r1 = two31 - (q1 * anc)
+		q2 = two31 // ad
+		r2 = two31 - (q2 * ad)
+
+
+		while True:
+			p += 1
+			q1 *= 2
+			r1 *= 2
+			if r1 >= anc:
+				q1 += 1
+				r1 -= anc
+			q2 *= 2
+			r2 *= 2
+			if r2 >= ad:
+				q2 += 1
+				r2 -= ad
+			delta = ad - r2
+
+			if q1 < delta: continue
+			if (q1 == delta) and (r1 == 0): continue
+			break
+
+
+		magic = q2 + 1
+		if d < 0: magic = two32 - magic
+		shift = p - bits
+		return magic, shift, False
+
+
+
+
 
 	DOT_FUNCTIONS = {
 		'.lang': dot_lang,
@@ -1122,6 +1287,8 @@ class Evaluator(object):
 		'.clear': dot_clear,
 		'.word': dot_word,
 		'.ascii': dot_ascii,
+		'.magic': dot_magic_divisor,
+		'.factor': dot_factor,
 	}
 
 

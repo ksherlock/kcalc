@@ -16,9 +16,19 @@ class Number(object):
 		default_int = t
 
 	@staticmethod
+	def get_default_int():
+		global default_int
+		return default_int
+
+	@staticmethod
 	def set_default_bool(t):
 		global default_bool
 		default_bool = t
+
+	@staticmethod
+	def get_default_bool():
+		global default_bool
+		return default_bool
 
 
 	def __init__(self, *args):
