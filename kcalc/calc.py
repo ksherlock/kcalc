@@ -30,6 +30,36 @@ def _unary(fn):
 		return unary_op(a, fn)
 	return inner
 
+def rotl(x):
+	bits = x.type().bits()
+	value = x.unsigned_value()
+	top = (value & 0x01) << (bits - 1)
+	bottom = value >> 1
+	return Number(top | bottom, x.type())
+
+def rotr(x):
+	bits = x.type().bits()
+	value = x.unsigned_value()
+	top = (value << 1) & ((1 << bits)-1)
+	bottom = value >> (bits - 1)
+	return Number(top | bottom, x.type())
+
+def reverse(x):
+	value = x.unsigned_value()
+	rv = 0
+	for i in range(0, x.type().bits()):
+		rv <<= 1
+		if (value & 0x01): rv = rv | 0x01
+		value >>= 1
+	return Number(rv, x.type())
+
+def popcount(x):
+	value = x.unsigned_value()
+	rv = 0
+	while value > 0:
+		if (value & 0x01): rv += 1
+		value >>= 1
+	return Number(rv)
 
 def c_division(a,b):
 	# C++11 division rounds towards 0.
@@ -41,6 +71,9 @@ def c_modulo(a,b):
 	# (a/b)*b + a%b == a
 	if (a < 0) == (b < 0): return a % b
 	return -(abs(a) % abs(b))
+
+
+
 
 def iso_pascal_modulo(a,b):
 
@@ -245,7 +278,7 @@ class CParser(Parser):
 						)
 					)
 					\s*\)
-				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof)
+				| (?P<op><<|>>|<=|>=|==|!=|&&|\|\||[-+=<>~*!~/%^&|()<>]|sizeof|popcount|reverse|rotl|rotr)
 				| (?P<id>[_A-Za-z][_A-Za-z0-9]*)
 				| '(?P<cc>
 					(
@@ -304,6 +337,10 @@ class CParser(Parser):
 		'~': (2, _unary(lambda x: ~x)),
 		'!': (2, _unary(lambda x: not x)),
 		'sizeof': (2, lambda n: n if n._exception else Number(n._type.bits() >> 3)),
+		'popcount': (1, popcount),
+		'reverse': (1, reverse),
+		'rotr': (1, rotr),
+		'rotl': (1, rotl)
 	}
 	SUFFIX = {
 		'u': None,
