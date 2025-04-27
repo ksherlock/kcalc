@@ -206,7 +206,7 @@ class Parser(object):
 
 	def _expr(self, end = None):
 
-		end_set = (end, None)
+		# end_set = (end, None)
 		operands = []
 		operators = []
 
@@ -215,7 +215,10 @@ class Parser(object):
 			if t == None: break
 			operands.append(t)
 			tk = self._token()
-			if tk in end_set: break
+			# if tk in end_set: break
+			if tk == end: break # end will usually be None.
+			if tk == None:
+				raise Exception("Syntax error: expected '{}', found EOF".format(end))
 
 			if not tk in self.BINARY: raise Exception("Bad operator: {}".format(tk))
 			op = self.BINARY[tk]
